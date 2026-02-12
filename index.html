@@ -112,8 +112,7 @@
     </div>
 
     <div class="row">
-      <button id="start" class="primary">START</button>
-      <button id="stop" disabled>STOP</button>
+      <button id="toggleStart" class="primary">START</button>
       <button id="reset">RESET</button>
     </div>
 
@@ -133,8 +132,7 @@
   const timerEl  = document.getElementById("timer");
   const titleEl  = document.getElementById("title");
 
-  const startBtn = document.getElementById("start");
-  const stopBtn  = document.getElementById("stop");
+  const toggleBtn = document.getElementById("toggleStart");
   const resetBtn = document.getElementById("reset");
 
   const slider = document.getElementById("oddsSlider");
@@ -173,43 +171,41 @@
 
   slider.addEventListener("input", updateOdds);
 
-  function start(){
-    if (rolling) return;
-    rolling = true;
-    setDigits("000", false);
-    t0 = performance.now();
+  function toggleStartStop(){
+    if (!rolling) {
+      // START処理
+      rolling = true;
+      setDigits("000", false);
+      t0 = performance.now();
 
-    timerId = setInterval(() => {
-      timerEl.textContent = formatTime(performance.now() - t0);
-    }, 16);
+      timerId = setInterval(() => {
+        timerEl.textContent = formatTime(performance.now() - t0);
+      }, 16);
 
-    rollId = setInterval(() => {
-      setDigits(pad3(randInt(1000)), false);
-    }, ROLL_MS);
+      rollId = setInterval(() => {
+        setDigits(pad3(randInt(1000)), false);
+      }, ROLL_MS);
 
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-  }
-
-  function stop(){
-    if (!rolling) return;
-    rolling = false;
-
-    clearInterval(rollId);
-    clearInterval(timerId);
-
-    const hit = (randInt(ODDS) === 0);
-
-    if (hit) {
-      setDigits("おまん", true);
+      toggleBtn.textContent = "STOP";
     } else {
-      let n;
-      do { n = randInt(1000); } while (n === 777);
-      setDigits(pad3(n), false);
-    }
+      // STOP処理
+      rolling = false;
 
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
+      clearInterval(rollId);
+      clearInterval(timerId);
+
+      const hit = (randInt(ODDS) === 0);
+
+      if (hit) {
+        setDigits("おまん", true);
+      } else {
+        let n;
+        do { n = randInt(1000); } while (n === 777);
+        setDigits(pad3(n), false);
+      }
+
+      toggleBtn.textContent = "START";
+    }
   }
 
   function reset(){
@@ -218,12 +214,10 @@
     rolling = false;
     setDigits("000", false);
     timerEl.textContent = "00:00.000";
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
+    toggleBtn.textContent = "START";
   }
 
-  startBtn.addEventListener("click", start);
-  stopBtn.addEventListener("click", stop);
+  toggleBtn.addEventListener("click", toggleStartStop);
   resetBtn.addEventListener("click", reset);
 
   updateOdds(); // 初期表示
