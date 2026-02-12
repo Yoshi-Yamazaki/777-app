@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>777 Probability Slider</title>
+  <style>
+    :root {
+      --bg:#0b0f14; --fg:#e8eef6; --muted:#7f8ea3;
+      --accent:#4cc9f0; --win:#ffd166;
+    }
+    body{
+      margin:0; min-height:100vh; display:grid; place-items:center;
+      background: radial-gradient(1200px 800px at 30% 20%, #142033, var(--bg));
+      color:var(--fg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto,
+        "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    }
+    .card{
+      width:min(520px, 92vw);
+      background: rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:16px;
+      padding:20px 18px 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      backdrop-filter: blur(10px);
+    }
+    .top{
+      display:flex; justify-content:space-between; align-items:baseline;
+      margin-bottom:10px;
+    }
+    .title{ font-weight:700; letter-spacing:0.04em; }
+    .sub{ font-size:12px; color:var(--muted); }
+
+    .display{
+      display:grid; place-items:center;
+      border-radius:14px;
+      background: rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.10);
+      padding:18px 12px;
+      margin:12px 0 14px;
+    }
+    .digits{
+      font-variant-numeric: tabular-nums;
+      font-size:72px;
+      letter-spacing:0.18em;
+      user-select:none;
+      text-shadow: 0 0 18px rgba(76,201,240,0.25);
+    }
+    .digits.win{
+      color:var(--win);
+      text-shadow: 0 0 22px rgba(255,209,102,0.45);
+    }
+    .timer{
+      margin-top:8px;
+      font-size:14px;
+      color:var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .row{ display:flex; gap:10px; flex-wrap:wrap; }
+    button{
+      flex:1; min-width:120px;
+      padding:12px 14px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.10);
+      color:var(--fg);
+      font-size:16px; font-weight:650;
+      cursor:pointer;
+    }
+    button.primary{
+      background: linear-gradient(135deg,
+        rgba(76,201,240,0.25), rgba(114,239,221,0.16));
+      border-color: rgba(76,201,240,0.35);
+    }
+    button:disabled{ opacity:0.55; cursor:not-allowed; }
+
+    .slider-box{
+      margin-top:14px;
+      padding:10px 12px;
+      border-radius:12px;
+      background: rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.10);
+    }
+    .slider-box label{
+      font-size:12px;
+      color:var(--muted);
+    }
+    input[type="range"]{
+      width:100%;
+      margin-top:6px;
+    }
+    .odds{
+      margin-top:6px;
+      font-size:14px;
+      font-weight:700;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="top">
+      <div class="title" id="title">1/319 777</div>
+      <div class="sub">STOPWATCH × SLOT</div>
+    </div>
+
+    <div class="display">
+      <div id="digits" class="digits">000</div>
+      <div id="timer" class="timer">00:00.000</div>
+    </div>
+
+    <div class="row">
+      <button id="start" class="primary">START</button>
+      <button id="stop" disabled>STOP</button>
+      <button id="reset">RESET</button>
+    </div>
+
+    <div class="slider-box">
+      <label for="oddsSlider">当たり確率（分母）</label>
+      <input type="range" id="oddsSlider" min="1" max="1000" value="30">
+      <div class="odds" id="oddsLabel">1 / 319</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  let ODDS = 30;           // ← スライダーで変わる
+  const ROLL_MS = 45;
+
+  const digitsEl = document.getElementById("digits");
+  const timerEl  = document.getElementById("timer");
+  const titleEl  = document.getElementById("title");
+
+  const startBtn = document.getElementById("start");
+  const stopBtn  = document.getElementById("stop");
+  const resetBtn = document.getElementById("reset");
+
+  const slider = document.getElementById("oddsSlider");
+  const oddsLabel = document.getElementById("oddsLabel");
+
+  let rolling = false;
+  let rollId = null;
+  let timerId = null;
+  let t0 = 0;
+
+  function randInt(max){
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    return a[0] % max;
+  }
+
+  function pad3(n){ return String(n).padStart(3,"0"); }
+
+  function formatTime(ms){
+    const m = Math.floor(ms/60000);
+    const s = Math.floor((ms%60000)/1000);
+    const x = Math.floor(ms%1000);
+    return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}.${String(x).padStart(3,"0")}`;
+  }
+
+  function setDigits(str, win=false){
+    digitsEl.textContent = str;
+    digitsEl.classList.toggle("win", win);
+  }
+
+  function updateOdds(){
+    ODDS = Number(slider.value);
+    oddsLabel.textContent = `1 / ${ODDS}`;
+    titleEl.textContent = `1/${ODDS} 777`;
+  }
+
+  slider.addEventListener("input", updateOdds);
+
+  function start(){
+    if (rolling) return;
+    rolling = true;
+    setDigits("000", false);
+    t0 = performance.now();
+
+    timerId = setInterval(() => {
+      timerEl.textContent = formatTime(performance.now() - t0);
+    }, 16);
+
+    rollId = setInterval(() => {
+      setDigits(pad3(randInt(1000)), false);
+    }, ROLL_MS);
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  }
+
+  function stop(){
+    if (!rolling) return;
+    rolling = false;
+
+    clearInterval(rollId);
+    clearInterval(timerId);
+
+    const hit = (randInt(ODDS) === 0);
+
+    if (hit) {
+      setDigits("おまん", true);
+    } else {
+      let n;
+      do { n = randInt(1000); } while (n === 777);
+      setDigits(pad3(n), false);
+    }
+
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  }
+
+  function reset(){
+    clearInterval(rollId);
+    clearInterval(timerId);
+    rolling = false;
+    setDigits("000", false);
+    timerEl.textContent = "00:00.000";
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  }
+
+  startBtn.addEventListener("click", start);
+  stopBtn.addEventListener("click", stop);
+  resetBtn.addEventListener("click", reset);
+
+  updateOdds(); // 初期表示
+})();
+</script>
+</body>
+</html>
