@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>完全確率もどき 試行シミュレーション</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #101826;
+      --fg: #eaf1ff;
+      --muted: #9baccc;
+      --line: #5ac8fa;
+      --accent: #f6c945;
+      --panel: rgba(18, 27, 44, 0.88);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 20px;
+      background:
+        radial-gradient(1000px 700px at 15% 12%, rgba(246, 201, 69, 0.15), transparent 35%),
+        radial-gradient(1200px 900px at 90% 90%, rgba(90, 200, 250, 0.12), transparent 40%),
+        linear-gradient(145deg, #0d141f 0%, #111b2b 55%, #0c1320 100%);
+      color: var(--fg);
+      font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+    }
+
+    .app {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 8px 0;
+      text-align: center;
+      color: var(--accent);
+      font-size: 1.9rem;
+      letter-spacing: 0.4px;
+    }
+
+    .sub {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(155, 172, 204, 0.28);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 16px 35px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(5px);
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+      color: #e6eeff;
+      border-bottom: 1px solid rgba(155, 172, 204, 0.24);
+      padding-bottom: 8px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field {
+      min-width: 160px;
+      flex: 1;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.84rem;
+      color: #b8c7e6;
+      margin-bottom: 6px;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 8px;
+      border: 1px solid #3d527d;
+      background: #19243b;
+      color: var(--fg);
+      font-size: 0.95rem;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(246, 201, 69, 0.2);
+    }
+
+    .btn {
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 10px 18px;
+      min-width: 140px;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-run {
+      color: #1b253a;
+      background: linear-gradient(135deg, #f6c945, #f39c12);
+    }
+
+    .btn-reset {
+      color: #dbe7ff;
+      background: #2f3f61;
+      border: 1px solid #49608f;
+    }
+
+    .progress-wrap {
+      margin-top: 12px;
+      display: none;
+    }
+
+    .progress-bg {
+      height: 20px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #1a2741;
+      border: 1px solid #3f5885;
+    }
+
+    .progress-bar {
+      width: 0;
+      height: 100%;
+      background: linear-gradient(90deg, #f39c12, #f6c945, #5ac8fa);
+      transition: width 0.15s ease;
+    }
+
+    .progress-text {
+      margin-top: 5px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.83rem;
+    }
+
+    .stats {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+
+    .stat {
+      background: #1a2640;
+      border: 1px solid #39517c;
+      border-radius: 10px;
+      padding: 10px 11px;
+    }
+
+    .stat .k {
+      color: #aebfe0;
+      font-size: 0.78rem;
+      margin-bottom: 3px;
+    }
+
+    .stat .v {
+      font-size: 1.12rem;
+      font-weight: 700;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 430px;
+    }
+
+    .note {
+      margin-top: 10px;
+      font-size: 0.83rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 700px) {
+      body { padding: 12px; }
+      h1 { font-size: 1.5rem; }
+      .chart-wrap { height: 340px; }
+      .btn { min-width: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>完全確率もどき 試行シミュレーション</h1>
+    <div class="sub">X軸: 試行回数 / Y軸: 何回転目で当選したか（各試行は0回転から開始）</div>
+
+    <div class="panel">
+      <h2>設定</h2>
+      <div class="controls">
+        <div class="field" style="max-width:220px;">
+          <label for="denominator">当選確率 1 / N</label>
+          <input id="denominator" type="number" min="1" max="1000" step="1" value="300" />
+        </div>
+        <div class="field" style="max-width:220px;">
+          <label for="trials">試行回数（当選セット数）</label>
+          <input id="trials" type="number" min="1" max="100000" step="1000" value="100000" />
+        </div>
+        <div class="field" style="max-width:220px;">
+          <label for="maxPoints">グラフ点数上限</label>
+          <select id="maxPoints">
+            <option value="1000">1000点（軽い）</option>
+            <option value="2000" selected>2000点（標準）</option>
+            <option value="4000">4000点（詳細）</option>
+          </select>
+        </div>
+        <button id="runBtn" class="btn btn-run" onclick="runSimulation()">開始</button>
+        <button class="btn btn-reset" onclick="resetInput()">初期値</button>
+      </div>
+      <div class="note">1試行ごとに0回転から回し、当選した回転数を記録します。1/300なら、Y=300周辺に集まりやすくなります。</div>
+
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bg"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="progress-text" id="progressText"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="summaryPanel" style="display:none;">
+      <h2>結果サマリー</h2>
+      <div class="stats" id="stats"></div>
+      <div style="margin-top: 12px; display: flex; justify-content: flex-end;">
+        <button id="exportCsvBtn" class="btn btn-reset" onclick="exportResultCsv()" disabled>結果をCSV出力</button>
+      </div>
+    </div>
+
+    <div class="panel" id="chartPanel" style="display:none;">
+      <h2>試行結果 折れ線グラフ</h2>
+      <div class="chart-wrap">
+        <canvas id="resultChart"></canvas>
+      </div>
+      <div class="note">水色: 当選回転数の実測値 / 黄色点線: 理論ライン（Y=N） / CSV出力は試行回数1〜100,000で固定</div>
+    </div>
+  </div>
+
+  <script>
+    let chartInst = null;
+    let exportRows = [];
+    let lastRunLabel = "simulation";
+    const EXPORT_TRIAL_MAX = 100000;
+
+    function resetInput() {
+      document.getElementById("denominator").value = 300;
+      document.getElementById("trials").value = 100000;
+      document.getElementById("maxPoints").value = 2000;
+    }
+
+    function yieldUI() {
+      return new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    function clampInt(v, min, max, fallback) {
+      const n = parseInt(v, 10);
+      if (Number.isNaN(n)) return fallback;
+      return Math.min(Math.max(n, min), max);
+    }
+
+    function createChart() {
+      if (chartInst) {
+        chartInst.destroy();
+        chartInst = null;
+      }
+
+      const ctx = document.getElementById("resultChart").getContext("2d");
+      chartInst = new Chart(ctx, {
+        type: "line",
+        data: {
+          datasets: [
+            {
+              label: "当選間隔（実測）",
+              data: [],
+              borderColor: "#5ac8fa",
+              backgroundColor: "rgba(90, 200, 250, 0.10)",
+              borderWidth: 1.2,
+              pointRadius: 0,
+              tension: 0,
+            },
+            {
+              label: "理論ライン",
+              data: [],
+              borderColor: "#f6c945",
+              borderWidth: 1.4,
+              borderDash: [8, 6],
+              pointRadius: 0,
+              tension: 0,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          interaction: { mode: "nearest", intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: "#d8e2f6", boxWidth: 24 }
+            },
+            tooltip: {
+              backgroundColor: "rgba(9, 13, 23, 0.95)",
+              borderColor: "#485f8a",
+              borderWidth: 1,
+              titleColor: "#f6c945",
+              bodyColor: "#dbe7ff",
+              callbacks: {
+                title: items => `試行回数: ${Math.round(items[0].raw.x).toLocaleString()} 回`,
+                label: item => `${item.dataset.label}: ${Math.round(item.raw.y).toLocaleString()} 回転`,
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: "linear",
+              title: { display: true, text: "試行回数", color: "#a7b7da" },
+              ticks: {
+                color: "#9db0d4",
+                maxTicksLimit: 10,
+                callback: v => Number(v).toLocaleString(),
+              },
+              grid: { color: "rgba(150, 170, 210, 0.15)" },
+            },
+            y: {
+              title: { display: true, text: "何回転目で当選したか", color: "#a7b7da" },
+              ticks: {
+                color: "#9db0d4",
+                callback: v => Number(v).toLocaleString(),
+              },
+              grid: { color: "rgba(150, 170, 210, 0.15)" },
+              min: 0,
+            }
+          }
+        }
+      });
+    }
+
+    function makeStatHtml(items) {
+      return items.map(item => (
+        `<div class="stat"><div class="k">${item.k}</div><div class="v">${item.v}</div></div>`
+      )).join("");
+    }
+
+    function exportResultCsv() {
+      if (exportRows.length === 0) {
+        alert("出力できる結果がありません。先にシミュレーションを実行してください。");
+        return;
+      }
+
+      const rowsForCsv = exportRows.filter(row => row.trial >= 1 && row.trial <= EXPORT_TRIAL_MAX);
+      if (rowsForCsv.length === 0) {
+        alert(`試行回数 1〜${EXPORT_TRIAL_MAX.toLocaleString()} の範囲にデータがありません。`);
+        return;
+      }
+
+      const lines = ["当選回転数,試行回数"];
+      for (const row of rowsForCsv) {
+        lines.push(`${row.interval},${row.trial}`);
+      }
+
+      const csvText = "\ufeff" + lines.join("\r\n");
+      const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `当選データ_1-${EXPORT_TRIAL_MAX}_${lastRunLabel}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function runSimulation() {
+      const denominatorInput = document.getElementById("denominator");
+      const trialsInput = document.getElementById("trials");
+      const pointsInput = document.getElementById("maxPoints");
+      const runBtn = document.getElementById("runBtn");
+
+      const denominator = clampInt(denominatorInput.value, 1, 1000, 300);
+      const trials = clampInt(trialsInput.value, 1, 100000, 100000);
+      const maxPoints = clampInt(pointsInput.value, 500, 20000, 2000);
+
+      denominatorInput.value = denominator;
+      trialsInput.value = trials;
+      pointsInput.value = maxPoints;
+
+      const progressWrap = document.getElementById("progressWrap");
+      const progressBar = document.getElementById("progressBar");
+      const progressText = document.getElementById("progressText");
+      const exportBtn = document.getElementById("exportCsvBtn");
+
+      const summaryPanel = document.getElementById("summaryPanel");
+      const chartPanel = document.getElementById("chartPanel");
+      const statsEl = document.getElementById("stats");
+
+      runBtn.disabled = true;
+      exportBtn.disabled = true;
+      progressWrap.style.display = "block";
+      progressBar.style.width = "0%";
+      progressText.textContent = "シミュレーション開始...";
+      summaryPanel.style.display = "none";
+      chartPanel.style.display = "block";
+
+      createChart();
+
+      const winProb = 1 / denominator;
+      const CHUNK = 2500;
+
+      let totalWins = 0;
+      let intervalSum = 0;
+      let intervalMax = 0;
+      let sampleStep = 1;
+      let sampled = [];
+      let allRows = [];
+
+      for (let start = 0; start < trials; start += CHUNK) {
+        const end = Math.min(start + CHUNK, trials);
+
+        for (let trialNo = start + 1; trialNo <= end; trialNo++) {
+          let spinsUntilHit = 0;
+          while (true) {
+            spinsUntilHit += 1;
+            if (Math.random() < winProb) break;
+          }
+
+          totalWins += 1;
+          intervalSum += spinsUntilHit;
+          if (spinsUntilHit > intervalMax) intervalMax = spinsUntilHit;
+          allRows.push({ interval: spinsUntilHit, trial: trialNo });
+
+          if (trialNo % sampleStep === 0) {
+            sampled.push({ x: trialNo, y: spinsUntilHit });
+            if (sampled.length > maxPoints) {
+              sampled = sampled.filter((_, idx) => idx % 2 === 0);
+              sampleStep *= 2;
+            }
+          }
+        }
+
+        const pct = (end / trials) * 100;
+        progressBar.style.width = `${pct.toFixed(2)}%`;
+        progressText.textContent = `処理中... 試行 ${end.toLocaleString()} / ${trials.toLocaleString()} (${pct.toFixed(1)}%)`;
+
+        chartInst.data.datasets[0].data = sampled;
+        chartInst.data.datasets[1].data = [
+          { x: 1, y: denominator },
+          { x: end, y: denominator }
+        ];
+        chartInst.update("none");
+        await yieldUI();
+      }
+
+      const avgInterval = totalWins > 0 ? intervalSum / totalWins : 0;
+      const measuredProb = avgInterval > 0 ? (100 / avgInterval) : 0;
+
+      const stats = [
+        { k: "設定確率", v: `1/${denominator}` },
+        { k: "試行回数", v: `${trials.toLocaleString()} 回` },
+        { k: "当選回数", v: `${totalWins.toLocaleString()} 回` },
+        { k: "平均当選間隔", v: totalWins > 0 ? `${avgInterval.toFixed(2)} 回転` : "当選なし" },
+        { k: "最大当選間隔", v: `${intervalMax.toLocaleString()} 回転` },
+        { k: "実測当選率", v: `${measuredProb.toFixed(4)} %` },
+      ];
+      statsEl.innerHTML = makeStatHtml(stats);
+      exportRows = allRows;
+      lastRunLabel = `1-${denominator}_${trials}trial_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}`;
+
+      summaryPanel.style.display = "block";
+      progressText.textContent = `完了: 試行 ${trials.toLocaleString()} 回 / 記録 ${totalWins.toLocaleString()} 件`;
+      runBtn.disabled = false;
+      exportBtn.disabled = exportRows.length === 0;
+      setTimeout(() => summaryPanel.scrollIntoView({ behavior: "smooth" }), 120);
+    }
+  </script>
+</body>
+</html>
